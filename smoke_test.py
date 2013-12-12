@@ -11,17 +11,25 @@ from mixcoatl.infrastructure.machine_image import MachineImage
 from mixcoatl.infrastructure.server_product import ServerProduct
 from mixcoatl.admin.billing_code import BillingCode
 from mixcoatl.infrastructure.server import Server
+from mixcoatl.infrastructure.volume import Volume
+from mixcoatl.infrastructure.snapshot import Snapshot
 from mixcoatl.admin.job import Job
 
 jobs = []
-job_averages = []
 servers_launched = []
+volumes_created = []
 server_launch_avg = []
+snapshots_created = []
+images_created = []
+
+# TODO:
+# Use geography/Subscription before running unnecessary tests.
 
 def name_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for x in range(size))
 
-def watch_jobs(jobs):
+def watch_jobs():
+	job_averages = []
 	print("Processing jobs... Please hold.")
 	job_table = PrettyTable(["ID", "Status", "Description", "Minutes to Complete"])
 	
@@ -31,16 +39,23 @@ def watch_jobs(jobs):
 				the_job = Job(i)           
 				start = datetime.strptime(the_job.start_date.split("+")[0], '%Y-%m-%dT%H:%M:%S.%f')
 				end = datetime.strptime(the_job.end_date.split("+")[0], '%Y-%m-%dT%H:%M:%S.%f')
-				min_to_comp = "{0:.2}".format(((end - start).total_seconds() / 60))
-				job_averages.append(float(min_to_comp))
-				job_table.add_row([the_job.job_id, the_job.status, the_job.description, min_to_comp])
+				min_to_comp = (end - start).total_seconds()
+				job_averages.append(min_to_comp)
+				job_table.add_row([the_job.job_id, the_job.status, the_job.description, round((min_to_comp/60),2)])
 				
 				if 'Launch Server' in the_job.description:
 					servers_launched.append(int(the_job.message))
+				elif 'CREATE VOLUME' in the_job.description:
+					volumes_created.append(int(the_job.message))
+				elif 'Snapshot of' in the_job.description:
+					snapshots_created.append(int(the_job.message))
+				elif 'Create Image' in the_job.description:
+					images_created.append(int(the_job.message))
 
 				jobs.remove(i)
-	
-	job_table.add_row(["--","--","--","{0:.2}".format(sum(job_averages)/len(job_averages))])
+
+	#print "Averages:",job_averages
+	job_table.add_row(["--","--","--",round((sum(job_averages)/60)/len(job_averages),2)])
 	print job_table
 
 if __name__ == '__main__':
@@ -143,10 +158,10 @@ if __name__ == '__main__':
 		else:
 			network_id = 0
 		
-		total_servers = input("How many servers would you like to launch? ")
+		total_servers = input("How many resources would you like to create at a time (ie: 3)? ")
 
 for ts in range(0, total_servers):
-	server_name = "test-"+name_generator()
+	server_name = "test-server-"+name_generator()
 	print "Launching server : %s" % (server_name)
 	new_server = Server()
 	new_server.provider_product_id = server_product_id
@@ -160,9 +175,76 @@ for ts in range(0, total_servers):
 	jobs.append(job_id)
 
 # Watch server launch jobs
-watch_jobs(jobs)
+watch_jobs()
+
+for vc in range(0, total_servers):
+	name = "test-volume-"+name_generator()
+	new_volume = Volume()
+	new_volume.data_center = data_center_id
+	new_volume.description = name
+	new_volume.name = name
+	new_volume.size_in_gb = 10
+	new_volume.budget = billing_code_id
+	result = new_volume.create()
+	print("Creating Volume : %s" % name)
+	jobs.append(result.job_id)
+
+# Watch volume create jobs
+watch_jobs()
+
+si = 0
+for av in servers_launched:
+	print "Attaching Volume #",volumes_created[si],"to Server #",av
+	result = Volume(volumes_created[si]).attach(av)
+	jobs.append(result.current_job)
+	si += 1
+
+# Watch volume attach jobs
+watch_jobs()
+
+# TODO: Does not seem to change snapshot name during create.
+for sc in volumes_created:
+	volume = Volume(sc)
+	volume.name = "test-snapshot-"+name_generator()
+	volume.budget = 10287
+	result = volume.snapshot()
+	print "Snapshoting volume : #%s" % (sc)
+	jobs.append(result.current_job)
+
+# Watch snapshot jobs
+watch_jobs()
+
+for mi in servers_launched:
+	m = MachineImage()
+	m.server_id = 458354
+	m.name = "test-machine-image-"+name_generator()
+	m.budget = 10287
+	results = m.create()
+	print "Imaging server : #%s" % (mi)
+	jobs.append(results)
+
+# Watch imaging jobs
+watch_jobs()
+
+print "Cleaning up the mess..."
 
 for st in servers_launched:
 	server = Server(st)
 	result = server.destroy()
 	print "Terminating server : #%s" % (st)
+
+for vd in volumes_created:
+    volume = Volume(vd)
+    result = volume.destroy()
+    print "Deleting volume : #%s" % (vd)
+
+for sd in snapshots_created:
+    snapshot = Snapshot(sd)
+    result = snapshot.destroy()
+    print "Deleting snapshot : #%s" % (sd)
+
+for md in images_created:
+    m = MachineImage(md)
+    result = m.destroy()
+    print "Deleting image : #%s" % (md)
+	
