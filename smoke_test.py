@@ -21,9 +21,11 @@ volumes_created = []
 server_launch_avg = []
 snapshots_created = []
 images_created = []
+averages = [int(time.time())]
 
 # TODO:
 # Use geography/Subscription before running unnecessary tests.
+# Cleanup ROOT-mounted Volumes
 
 def name_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for x in range(size))
@@ -55,7 +57,10 @@ def watch_jobs():
 				jobs.remove(i)
 
 	#print "Averages:",job_averages
-	job_table.add_row(["--","--","--",round((sum(job_averages)/60)/len(job_averages),2)])
+	average = round((sum(job_averages)/60)/len(job_averages),2)
+	averages.append(average)
+	job_table.add_row(["--","--","--",average])
+	
 	print job_table
 
 if __name__ == '__main__':
@@ -247,4 +252,48 @@ for md in images_created:
     m = MachineImage(md)
     result = m.destroy()
     print "Deleting image : #%s" % (md)
-	
+
+# Write data for trending analysis.
+if os.environ.has_key('ES_ENDPOINT'):
+	parts = os.environ['ES_ENDPOINT'].split('//', 1)
+	parts = parts[1].split('/', 1)[0]
+	parts = parts.split(':', 1)[0]
+	stat_dir = parts
+else:
+	stat_dir = "cloud.enstratius.com"
+
+stat_path = 'stats/'+stat_dir
+if not os.path.exists(stat_path):
+	os.makedirs(stat_path)
+
+file = stat_path+'/'+str(account_id)+'.csv'
+list = [str(i) for i in averages]
+
+if not os.path.exists(file):
+	with open(file, 'a') as f:
+		f.write('#date,servers,volumes,attach,snapshots,image\n')
+
+with open(file, 'a') as f:
+	f.write(','.join(list)+'\n')
+
+with open(file) as f:
+    hist_servers = []
+    hist_volumes = []
+    hist_attach = []
+    hist_snapshots = []
+    hist_images = []
+    next(f)
+
+    for line in f:
+		results = line.rstrip('\n').split(',')
+		hist_servers.append(float(results[1]))
+		hist_volumes.append(float(results[2]))
+		hist_attach.append(float(results[3]))
+		hist_snapshots.append(float(results[4]))
+		hist_images.append(float(results[5]))
+
+print "Server(s) launched in "+str(averages[1])+" minutes.  Average is "+str(round(sum(hist_servers)/len(hist_servers), 2))+" minutes ( "+str(round(100 - ((averages[1] / round(sum(hist_servers)/len(hist_servers), 2) * 100)), 2))+"% change )"
+print "Volume(s) created in "+str(averages[2])+" minutes. Average is "+str(round(sum(hist_volumes)/len(hist_volumes), 2))+" minutes ( "+str(round(100 - ((averages[2] / round(sum(hist_volumes)/len(hist_volumes), 2) * 100)), 2))+"% change )"
+print "Volume(s) attached in "+str(averages[3])+" minutes.  Average is "+str(round(sum(hist_attach)/len(hist_attach), 2))+" minutes ( "+str(round(100 - ((averages[3] / round(sum(hist_attach)/len(hist_attach), 2) * 100)), 2))+"% change )"
+print "Volume snapshot(s) completed in "+str(averages[4])+" minutes.  Average is "+str(round(sum(hist_snapshots)/len(hist_snapshots), 2))+" minutes ( "+str(round(100 - ((averages[4] / round(sum(hist_snapshots)/len(hist_snapshots), 2) * 100)), 2))+"% change )"
+print "Server(s) imaged in "+str(averages[5])+" minutes.  Average is "+str(round(sum(hist_images)/len(hist_images), 2))+" minutes ( "+str(round(100 - ((averages[5] / round(sum(hist_images)/len(hist_images), 2) * 100)), 2))+"% change )"

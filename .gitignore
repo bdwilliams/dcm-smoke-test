@@ -36,3 +36,5 @@ nosetests.xml
 .pydevproject
 
 test.py
+dcm-trending.csv
+stats/*
