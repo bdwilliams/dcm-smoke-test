@@ -41,7 +41,7 @@ def watch_jobs():
 				the_job = Job(i)           
 				start = datetime.strptime(the_job.start_date.split("+")[0], '%Y-%m-%dT%H:%M:%S.%f')
 				end = datetime.strptime(the_job.end_date.split("+")[0], '%Y-%m-%dT%H:%M:%S.%f')
-				min_to_comp = (end - start).total_seconds()
+				min_to_comp = (end - start).seconds
 				job_averages.append(min_to_comp)
 				job_table.add_row([the_job.job_id, the_job.status, the_job.description, round((min_to_comp/60),2)])
 				
