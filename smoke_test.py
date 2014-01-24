@@ -13,6 +13,7 @@ from mixcoatl.admin.billing_code import BillingCode
 from mixcoatl.infrastructure.server import Server
 from mixcoatl.infrastructure.volume import Volume
 from mixcoatl.infrastructure.snapshot import Snapshot
+from mixcoatl.geography.subscription import Subscription
 from mixcoatl.admin.job import Job
 
 jobs = []
@@ -24,8 +25,8 @@ images_created = []
 averages = [int(time.time())]
 
 # TODO:
-# Use geography/Subscription before running unnecessary tests.
-# Cleanup ROOT-mounted Volumes
+# Cleanup ROOT-mounted Volumes.
+# Finish Network selection.
 
 def name_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for x in range(size))
@@ -165,93 +166,147 @@ if __name__ == '__main__':
 		
 		total_servers = input("How many resources would you like to create at a time (ie: 3)? ")
 
-for ts in range(0, total_servers):
-	server_name = "test-server-"+name_generator()
-	print "Launching server : %s" % (server_name)
-	new_server = Server()
-	new_server.provider_product_id = server_product_id
-	new_server.machine_image = machine_image_id
-	new_server.data_center = data_center_id
-	new_server.description = server_name
-	new_server.name = server_name
-	new_server.vlan = network_id
-	new_server.budget = billing_code_id
-	job_id = new_server.launch()
-	jobs.append(job_id)
+print "###"
+print "# Started:\t\t%s" % (time.strftime("%c"))
+print "# Account:\t\t%s" % account_id
+print "# Region:\t\t%s" % region_id
+print "# Datacenter:\t\t%s" % data_center_id
+print "# Machine Image:\t%s" % machine_image_id
+print "# Server Product:\t%s" % server_product_id
+print "# Budget Code:\t\t%s" % billing_code_id
 
-# Watch server launch jobs
-watch_jobs()
+if cmd_args.network == "0" or network_id == "0":
+	print "# Network:\t\tNone"
+else:
+	print "# Network:\t\t%s" % network_id
 
-for vc in range(0, total_servers):
-	name = "test-volume-"+name_generator()
-	new_volume = Volume()
-	new_volume.data_center = data_center_id
-	new_volume.description = name
-	new_volume.name = name
-	new_volume.size_in_gb = 10
-	new_volume.budget = billing_code_id
-	result = new_volume.create()
-	print("Creating Volume : %s" % name)
-	jobs.append(result.job_id)
+print "###"
+print "# Run again with:\t./smoke_test.py -a %s -r %s -d %s -m %s -b %s -p %s -n %s -s %s" % (account_id, region_id, data_center_id, machine_image_id, billing_code_id, server_product_id, network_id, total_servers)
+print "###"
+print "# Subscriptions:"
 
-# Watch volume create jobs
-watch_jobs()
+sub = Subscription.region(region_id)['subscriptions']
 
-si = 0
-for av in servers_launched:
-	print "Attaching Volume #",volumes_created[si],"to Server #",av
-	result = Volume(volumes_created[si]).attach(av)
-	jobs.append(result.current_job)
-	si += 1
+if sub[0]['subscribedServer']:
+	print "# Server:\t\t[OK]"
+else:
+	print "# Server:\t\t[UNSUPPORTED]"
 
-# Watch volume attach jobs
-watch_jobs()
+if sub[0]['subscribedVolume']:
+	print "# Volumes:\t\t[OK]"
+else:
+	print "# Volumes:\t\t[UNSUPPORTED]"
 
-# TODO: Does not seem to change snapshot name during create.
-for sc in volumes_created:
-	volume = Volume(sc)
-	volume.name = "test-snapshot-"+name_generator()
-	volume.budget = 10287
-	result = volume.snapshot()
-	print "Snapshoting volume : #%s" % (sc)
-	jobs.append(result.current_job)
+if sub[0]['subscribedSnapshot']:
+	print "# Snapshots:\t\t[OK]"
+else:
+	print "# Snapshots:\t\t[UNSUPPORTED]"
 
-# Watch snapshot jobs
-watch_jobs()
+if sub[0]['subscribedMachineImage']:
+	print "# Image:\t\t[OK]"
+else:
+	print "# Image:\t\t[UNSUPPORTED]"
 
-for mi in servers_launched:
-	m = MachineImage()
-	m.server_id = 458354
-	m.name = "test-machine-image-"+name_generator()
-	m.budget = 10287
-	results = m.create()
-	print "Imaging server : #%s" % (mi)
-	jobs.append(results)
+print "###"
 
-# Watch imaging jobs
-watch_jobs()
+if sub[0]['subscribedServer']:
+	for ts in range(0, total_servers):
+		server_name = "test-server-"+name_generator()
+		print "Launching server : %s" % (server_name)
+		new_server = Server()
+		new_server.provider_product_id = server_product_id
+		new_server.machine_image = machine_image_id
+		new_server.data_center = data_center_id
+		new_server.description = server_name
+		new_server.name = server_name
+		new_server.vlan = network_id
+		new_server.budget = billing_code_id
+		job_id = new_server.launch()
+		jobs.append(job_id)
+	
+	# Watch server launch jobs
+	watch_jobs()
+
+if sub[0]['subscribedVolume']:
+	for vc in range(0, total_servers):
+		name = "test-volume-"+name_generator()
+		new_volume = Volume()
+		new_volume.data_center = data_center_id
+		new_volume.description = name
+		new_volume.name = name
+		new_volume.size_in_gb = 10
+		new_volume.budget = billing_code_id
+		result = new_volume.create()
+		print("Creating Volume : %s" % name)
+		jobs.append(result.job_id)
+	
+	# Watch volume create jobs
+	watch_jobs()
+
+	if sub[0]['subscribedServer']:
+		si = 0
+		for av in servers_launched:
+			print "Attaching Volume #",volumes_created[si],"to Server #",av
+			result = Volume(volumes_created[si]).attach(av)
+			jobs.append(result.current_job)
+			si += 1
+		
+		# Watch volume attach jobs
+		watch_jobs()
+
+if sub[0]['subscribedSnapshot']:
+	# TODO: Does not seem to change snapshot name during create.
+	for sc in volumes_created:
+		volume = Volume(sc)
+		volume.name = "test-snapshot-"+name_generator()
+		volume.budget = billing_code_id
+		result = volume.snapshot()
+		print "Snapshoting volume : #%s" % (sc)
+		jobs.append(result.current_job)
+	
+	# Watch snapshot jobs
+	watch_jobs()
+
+if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer']:
+	sv = 0
+	for mi in servers_launched:
+		m = MachineImage()
+		m.server_id = servers_launched[sv]
+		m.name = "test-machine-image-"+name_generator()
+		m.budget = billing_code_id
+		results = m.create()
+		print "Imaging server : #%s" % (mi)
+		jobs.append(results)
+		sv += 1
+		
+	# Watch imaging jobs
+	watch_jobs()
 
 print "Cleaning up the mess..."
 
-for st in servers_launched:
-	server = Server(st)
-	result = server.destroy()
-	print "Terminating server : #%s" % (st)
+if sub[0]['subscribedServer']:
+	for st in servers_launched:
+		server = Server(st)
+		result = server.destroy()
+		print "Terminating server : #%s" % (st)
 
-for vd in volumes_created:
-    volume = Volume(vd)
-    result = volume.destroy()
-    print "Deleting volume : #%s" % (vd)
+if sub[0]['subscribedVolume']:
+	for vd in volumes_created:
+	    volume = Volume(vd)
+	    result = volume.destroy()
+	    print "Deleting volume : #%s" % (vd)
 
-for sd in snapshots_created:
-    snapshot = Snapshot(sd)
-    result = snapshot.destroy()
-    print "Deleting snapshot : #%s" % (sd)
+if sub[0]['subscribedSnapshot']:
+	for sd in snapshots_created:
+	    snapshot = Snapshot(sd)
+	    result = snapshot.destroy()
+	    print "Deleting snapshot : #%s" % (sd)
 
-for md in images_created:
-    m = MachineImage(md)
-    result = m.destroy()
-    print "Deleting image : #%s" % (md)
+if sub[0]['subscribedMachineImage']:
+	for md in images_created:
+	    m = MachineImage(md)
+	    result = m.destroy()
+	    print "Deleting image : #%s" % (md)
 
 # Write data for trending analysis.
 if os.environ.has_key('ES_ENDPOINT'):
@@ -286,14 +341,24 @@ with open(file) as f:
 
     for line in f:
 		results = line.rstrip('\n').split(',')
-		hist_servers.append(float(results[1]))
-		hist_volumes.append(float(results[2]))
-		hist_attach.append(float(results[3]))
-		hist_snapshots.append(float(results[4]))
-		hist_images.append(float(results[5]))
+		if sub[0]['subscribedServer']:
+			hist_servers.append(float(results[1]))
+		if sub[0]['subscribedVolume']:
+			hist_volumes.append(float(results[2]))
+		if sub[0]['subscribedVolume']:
+			hist_attach.append(float(results[3]))
+		if sub[0]['subscribedSnapshot']:
+			hist_snapshots.append(float(results[4]))
+		if sub[0]['subscribedMachineImage']:
+			hist_images.append(float(results[5]))
 
-print "Server(s) launched in "+str(averages[1])+" minutes.  Average is "+str(round(sum(hist_servers)/len(hist_servers), 2))+" minutes ( "+str(round(100 - ((averages[1] / round(sum(hist_servers)/len(hist_servers), 2) * 100)), 2))+"% change )"
-print "Volume(s) created in "+str(averages[2])+" minutes. Average is "+str(round(sum(hist_volumes)/len(hist_volumes), 2))+" minutes ( "+str(round(100 - ((averages[2] / round(sum(hist_volumes)/len(hist_volumes), 2) * 100)), 2))+"% change )"
-print "Volume(s) attached in "+str(averages[3])+" minutes.  Average is "+str(round(sum(hist_attach)/len(hist_attach), 2))+" minutes ( "+str(round(100 - ((averages[3] / round(sum(hist_attach)/len(hist_attach), 2) * 100)), 2))+"% change )"
-print "Volume snapshot(s) completed in "+str(averages[4])+" minutes.  Average is "+str(round(sum(hist_snapshots)/len(hist_snapshots), 2))+" minutes ( "+str(round(100 - ((averages[4] / round(sum(hist_snapshots)/len(hist_snapshots), 2) * 100)), 2))+"% change )"
-print "Server(s) imaged in "+str(averages[5])+" minutes.  Average is "+str(round(sum(hist_images)/len(hist_images), 2))+" minutes ( "+str(round(100 - ((averages[5] / round(sum(hist_images)/len(hist_images), 2) * 100)), 2))+"% change )"
+if sub[0]['subscribedServer']:
+	print "Server(s) launched in "+str(averages[1])+" minutes.  Average is "+str(round(sum(hist_servers)/len(hist_servers), 2))+" minutes ( "+str(round(100 - ((averages[1] / round(sum(hist_servers)/len(hist_servers), 2) * 100)), 2))+"% change )"
+if sub[0]['subscribedVolume']:
+	print "Volume(s) created in "+str(averages[2])+" minutes. Average is "+str(round(sum(hist_volumes)/len(hist_volumes), 2))+" minutes ( "+str(round(100 - ((averages[2] / round(sum(hist_volumes)/len(hist_volumes), 2) * 100)), 2))+"% change )"
+if sub[0]['subscribedVolume']:
+	print "Volume(s) attached in "+str(averages[3])+" minutes.  Average is "+str(round(sum(hist_attach)/len(hist_attach), 2))+" minutes ( "+str(round(100 - ((averages[3] / round(sum(hist_attach)/len(hist_attach), 2) * 100)), 2))+"% change )"
+if sub[0]['subscribedSnapshot']:
+	print "Volume snapshot(s) completed in "+str(averages[4])+" minutes.  Average is "+str(round(sum(hist_snapshots)/len(hist_snapshots), 2))+" minutes ( "+str(round(100 - ((averages[4] / round(sum(hist_snapshots)/len(hist_snapshots), 2) * 100)), 2))+"% change )"
+if sub[0]['subscribedMachineImage']:
+	print "Server(s) imaged in "+str(averages[5])+" minutes.  Average is "+str(round(sum(hist_images)/len(hist_images), 2))+" minutes ( "+str(round(100 - ((averages[5] / round(sum(hist_images)/len(hist_images), 2) * 100)), 2))+"% change )"
