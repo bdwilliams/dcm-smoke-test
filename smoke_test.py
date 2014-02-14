@@ -44,7 +44,7 @@ def watch_jobs():
 				end = datetime.strptime(the_job.end_date.split("+")[0], '%Y-%m-%dT%H:%M:%S.%f')
 				min_to_comp = (end - start).seconds
 				job_averages.append(min_to_comp)
-				job_table.add_row([the_job.job_id, the_job.status, the_job.description, round((min_to_comp/60),2)])
+				job_table.add_row([the_job.job_id, the_job.status, the_job.description, round((min_to_comp/60),3)])
 				
 				if 'Launch Server' in the_job.description:
 					servers_launched.append(int(the_job.message))
@@ -58,7 +58,7 @@ def watch_jobs():
 				jobs.remove(i)
 
 	#print "Averages:",job_averages
-	average = round((sum(job_averages)/60)/len(job_averages),2)
+	average = round((sum(job_averages)/60)/len(job_averages),3)
 	averages.append(average)
 	job_table.add_row(["--","--","--",average])
 	
@@ -73,7 +73,10 @@ if __name__ == '__main__':
 	parser.add_argument('--datacenter', '-d', help='Datacenter ID')
 	parser.add_argument('--machineimage', '-m', help='Machine Image ID')
 	parser.add_argument('--network', '-n', help='Network ID')
-	parser.add_argument('--budget', '-b', help='Budget Code ID')	
+	parser.add_argument('--budget', '-b', help='Budget Code ID')
+	parser.add_argument('--noimaging', '-ni', help='Skip Server Imaging', action='store_true')
+	parser.add_argument('--nosnapshots', '-ns', help='Skip Volume Snapshotting', action='store_true')
+	parser.add_argument('--novolumes', '-nv', help='Skip Volume Creation/Attaching', action='store_true')
 	cmd_args = parser.parse_args()
 	
 	if cmd_args.account is not None and cmd_args.region is not None and cmd_args.servers is not None and cmd_args.product is not None and cmd_args.datacenter is not None and cmd_args.machineimage is not None and cmd_args.budget is not None:
@@ -175,13 +178,28 @@ print "# Machine Image:\t%s" % machine_image_id
 print "# Server Product:\t%s" % server_product_id
 print "# Budget Code:\t\t%s" % billing_code_id
 
-if cmd_args.network == "0" or network_id == "0":
+if cmd_args.network == "0" or network_id == "0" or network_id is None:
 	print "# Network:\t\tNone"
+	network_id = 0
 else:
 	print "# Network:\t\t%s" % network_id
 
 print "###"
-print "# Run again with:\t./smoke_test.py -a %s -r %s -d %s -m %s -b %s -p %s -n %s -s %s" % (account_id, region_id, data_center_id, machine_image_id, billing_code_id, server_product_id, network_id, total_servers)
+
+run = "# Run again with:\t./smoke_test.py -a ",str(account_id)," -r ",str(region_id)," -d ",str(data_center_id)," -m ",str(machine_image_id)," -b ",str(billing_code_id)," -p ",str(server_product_id)," -n ",str(network_id)
+run2 = ''.join(run)
+
+if cmd_args.novolumes:
+	run2 += ' -nv'
+
+if cmd_args.nosnapshots:
+	run2 += ' -ns'
+
+if cmd_args.noimaging:
+	run2 += ' -ni'
+	
+print run2,"-s",str(total_servers)
+	
 print "###"
 print "# Subscriptions:"
 
@@ -227,7 +245,7 @@ if sub[0]['subscribedServer']:
 	# Watch server launch jobs
 	watch_jobs()
 
-if sub[0]['subscribedVolume']:
+if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
 	for vc in range(0, total_servers):
 		name = "test-volume-"+name_generator()
 		new_volume = Volume()
@@ -254,7 +272,7 @@ if sub[0]['subscribedVolume']:
 		# Watch volume attach jobs
 		watch_jobs()
 
-if sub[0]['subscribedSnapshot']:
+if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None:
 	# TODO: Does not seem to change snapshot name during create.
 	for sc in volumes_created:
 		volume = Volume(sc)
@@ -267,7 +285,7 @@ if sub[0]['subscribedSnapshot']:
 	# Watch snapshot jobs
 	watch_jobs()
 
-if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer']:
+if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer'] and cmd_args.noimaging is None:
 	sv = 0
 	for mi in servers_launched:
 		m = MachineImage()
@@ -290,75 +308,20 @@ if sub[0]['subscribedServer']:
 		result = server.destroy()
 		print "Terminating server : #%s" % (st)
 
-if sub[0]['subscribedVolume']:
+if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
 	for vd in volumes_created:
 	    volume = Volume(vd)
 	    result = volume.destroy()
 	    print "Deleting volume : #%s" % (vd)
 
-if sub[0]['subscribedSnapshot']:
+if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None:
 	for sd in snapshots_created:
 	    snapshot = Snapshot(sd)
 	    result = snapshot.destroy()
 	    print "Deleting snapshot : #%s" % (sd)
 
-if sub[0]['subscribedMachineImage']:
+if sub[0]['subscribedMachineImage'] and cmd_args.noimaging is None:
 	for md in images_created:
 	    m = MachineImage(md)
 	    result = m.destroy()
 	    print "Deleting image : #%s" % (md)
-
-# Write data for trending analysis.
-if os.environ.has_key('ES_ENDPOINT'):
-	parts = os.environ['ES_ENDPOINT'].split('//', 1)
-	parts = parts[1].split('/', 1)[0]
-	parts = parts.split(':', 1)[0]
-	stat_dir = parts
-else:
-	stat_dir = "cloud.enstratius.com"
-
-stat_path = 'stats/'+stat_dir
-if not os.path.exists(stat_path):
-	os.makedirs(stat_path)
-
-file = stat_path+'/'+str(account_id)+'.csv'
-list = [str(i) for i in averages]
-
-if not os.path.exists(file):
-	with open(file, 'a') as f:
-		f.write('#date,servers,volumes,attach,snapshots,image\n')
-
-with open(file, 'a') as f:
-	f.write(','.join(list)+'\n')
-
-with open(file) as f:
-    hist_servers = []
-    hist_volumes = []
-    hist_attach = []
-    hist_snapshots = []
-    hist_images = []
-    next(f)
-
-    for line in f:
-		results = line.rstrip('\n').split(',')
-		if sub[0]['subscribedServer']:
-			hist_servers.append(float(results[1]))
-		if sub[0]['subscribedVolume']:
-			hist_volumes.append(float(results[2]))
-		if sub[0]['subscribedVolume']:
-			hist_attach.append(float(results[3]))
-		if sub[0]['subscribedSnapshot']:
-			hist_snapshots.append(float(results[4]))
-		if sub[0]['subscribedMachineImage']:
-			hist_images.append(float(results[5]))
-
-if sub[0]['subscribedServer']:
-	print "Server(s) launched in "+str(averages[1])+" minutes.  Average is "+str(round(sum(hist_servers)/len(hist_servers), 2))+" minutes ( "+str(round(100 - ((averages[1] / round(sum(hist_servers)/len(hist_servers), 2) * 100)), 2))+"% change )"
-if sub[0]['subscribedVolume']:
-	print "Volume(s) created in "+str(averages[2])+" minutes. Average is "+str(round(sum(hist_volumes)/len(hist_volumes), 2))+" minutes ( "+str(round(100 - ((averages[2] / round(sum(hist_volumes)/len(hist_volumes), 2) * 100)), 2))+"% change )"
-if sub[0]['subscribedVolume']:
-	print "Volume(s) attached in "+str(averages[3])+" minutes.  Average is "+str(round(sum(hist_attach)/len(hist_attach), 2))+" minutes ( "+str(round(100 - ((averages[3] / round(sum(hist_attach)/len(hist_attach), 2) * 100)), 2))+"% change )"
-if sub[0]['subscribedSnapshot']:
-	print "Volume snapshot(s) completed in "+str(averages[4])+" minutes.  Average is "+str(round(sum(hist_snapshots)/len(hist_snapshots), 2))+" minutes ( "+str(round(100 - ((averages[4] / round(sum(hist_snapshots)/len(hist_snapshots), 2) * 100)), 2))+"% change )"
-if sub[0]['subscribedMachineImage']:
-	print "Server(s) imaged in "+str(averages[5])+" minutes.  Average is "+str(round(sum(hist_images)/len(hist_images), 2))+" minutes ( "+str(round(100 - ((averages[5] / round(sum(hist_images)/len(hist_images), 2) * 100)), 2))+"% change )"
