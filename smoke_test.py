@@ -272,7 +272,7 @@ if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
 		# Watch volume attach jobs
 		watch_jobs()
 
-if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None:
+if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None and cmd_args.novolumes is None:
 	# TODO: Does not seem to change snapshot name during create.
 	for sc in volumes_created:
 		volume = Volume(sc)
@@ -314,7 +314,7 @@ if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
 	    result = volume.destroy()
 	    print "Deleting volume : #%s" % (vd)
 
-if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None:
+if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None and cmd_args.novolumes is None:
 	for sd in snapshots_created:
 	    snapshot = Snapshot(sd)
 	    result = snapshot.destroy()
