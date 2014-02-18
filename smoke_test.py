@@ -14,6 +14,8 @@ from mixcoatl.infrastructure.server import Server
 from mixcoatl.infrastructure.volume import Volume
 from mixcoatl.infrastructure.snapshot import Snapshot
 from mixcoatl.geography.subscription import Subscription
+from mixcoatl.automation.configuration_management_account import ConfigurationManagementAccount
+from mixcoatl.automation.script import Script
 from mixcoatl.admin.job import Job
 
 jobs = []
@@ -23,6 +25,8 @@ server_launch_avg = []
 snapshots_created = []
 images_created = []
 averages = [int(time.time())]
+cm_account_id = None
+cm_scripts = None
 
 # TODO:
 # Cleanup ROOT-mounted Volumes.
@@ -73,6 +77,8 @@ if __name__ == '__main__':
 	parser.add_argument('--datacenter', '-d', help='Datacenter ID')
 	parser.add_argument('--machineimage', '-m', help='Machine Image ID')
 	parser.add_argument('--network', '-n', help='Network ID')
+	parser.add_argument('--cm_account_id', '-cm', help='Configuration Management Account ID')
+	parser.add_argument('--cm_scripts', '-cs', help='Configuration Management Scripts (comma delimited - no spaces)')
 	parser.add_argument('--budget', '-b', help='Budget Code ID')
 	parser.add_argument('--noimaging', '-ni', help='Skip Server Imaging', action='store_true')
 	parser.add_argument('--nosnapshots', '-ns', help='Skip Volume Snapshotting', action='store_true')
@@ -81,13 +87,15 @@ if __name__ == '__main__':
 	
 	if cmd_args.account is not None and cmd_args.region is not None and cmd_args.servers is not None and cmd_args.product is not None and cmd_args.datacenter is not None and cmd_args.machineimage is not None and cmd_args.budget is not None:
 		account_id = cmd_args.account
-		region_id = cmd_args.region
+		region_id = int(cmd_args.region)
 		total_servers = int(cmd_args.servers)
 		server_product_id = cmd_args.product
 		data_center_id = cmd_args.datacenter
 		machine_image_id = cmd_args.machineimage
 		billing_code_id = cmd_args.budget
 		network_id = cmd_args.network
+		cm_account_id = cmd_args.cm_account_id
+		cm_scripts = cmd_args.cm_scripts
 	else:
 		account_table = PrettyTable(["Account ID", "Account Name"]);
 		start = time.time()
@@ -166,6 +174,30 @@ if __name__ == '__main__':
 			network_id = input("Enter a Network (Type 0 for None): ")
 		else:
 			network_id = 0
+
+		cm_account = PrettyTable(["Status", "CM ID#", "Name", "Endpoint"]);
+		start = time.time()
+		
+		if len(ConfigurationManagementAccount.all()) > 0:
+			for cm in ConfigurationManagementAccount.all():
+				if cm.status == 'ACTIVE':
+					cm_account.add_row([cm.status, cm.cm_account_id, cm.cm_service['name'], cm.cm_service['service_endpoint']])
+			
+			print 'Results returned in', time.time()-start, 'seconds.'
+			print cm_account
+			
+			cm_account_id = input("Enter a Configuration Management Account ID: ")
+			
+			scripts = PrettyTable(["Script ID", "Name"]);
+			start = time.time()
+			for sc in Script().all(cm_account_id):
+				if sc['status'] == 'ACTIVE':
+					scripts.add_row([sc['sharedScriptCode'], sc['name']])
+			
+			print 'Results returned in', time.time()-start, 'seconds.'
+			print scripts
+			
+			cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces): ")
 		
 		total_servers = input("How many resources would you like to create at a time (ie: 3)? ")
 
@@ -178,6 +210,12 @@ print "# Machine Image:\t%s" % machine_image_id
 print "# Server Product:\t%s" % server_product_id
 print "# Budget Code:\t\t%s" % billing_code_id
 
+if cm_account_id is not None:
+	print "# CM Account:\t\t%s" % cm_account_id
+
+if cm_scripts is not None:
+	print "# CM Scripts:\t\t%s" % cm_scripts
+
 if cmd_args.network == "0" or network_id == "0" or network_id is None:
 	print "# Network:\t\tNone"
 	network_id = 0
@@ -187,19 +225,28 @@ else:
 print "###"
 
 run = "# Run again with:\t./smoke_test.py -a ",str(account_id)," -r ",str(region_id)," -d ",str(data_center_id)," -m ",str(machine_image_id)," -b ",str(billing_code_id)," -p ",str(server_product_id)," -n ",str(network_id)
-run2 = ''.join(run)
+
+run = ''.join(run)
+
+if cm_account_id is not None:
+	run += " -cm "+str(cm_account_id)
+
+if cm_scripts is not None:
+	run += ' -cs '+str(cm_scripts)
 
 if cmd_args.novolumes:
-	run2 += ' -nv'
+	run += ' -nv'
 
 if cmd_args.nosnapshots:
-	run2 += ' -ns'
+	run += ' -ns'
 
 if cmd_args.noimaging:
-	run2 += ' -ni'
-	
-print run2,"-s",str(total_servers)
-	
+	run += ' -ni'
+
+run += ' -s '+str(total_servers)
+
+print run
+
 print "###"
 print "# Subscriptions:"
 
@@ -239,6 +286,8 @@ if sub[0]['subscribedServer']:
 		new_server.name = server_name
 		new_server.vlan = network_id
 		new_server.budget = billing_code_id
+		new_server.cmAccount = cm_account_id
+		new_server.cm_scripts = cm_scripts
 		job_id = new_server.launch()
 		jobs.append(job_id)
 	
