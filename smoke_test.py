@@ -30,6 +30,7 @@ cm_scripts = None
 
 # TODO:
 # Cleanup ROOT-mounted Volumes.
+# Show Agent Versions (and skip CM once API returns isRegistered status)
 
 def name_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for x in range(size))
