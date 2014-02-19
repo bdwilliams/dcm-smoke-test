@@ -1,3 +1,3 @@
 datetime
 prettytable
-https://github.com/enStratus/mixcoatl.git
+https://github.com/enStratus/mixcoatl/zipball/master
