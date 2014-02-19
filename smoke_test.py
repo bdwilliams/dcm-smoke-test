@@ -100,9 +100,9 @@ if __name__ == '__main__':
 		account_table = PrettyTable(["Account ID", "Account Name"]);
 		start = time.time()
 		
-		# TODO: list the status or not show accounts with STATUS != 'ACTIVE'
 		for account in Account.all():
-			account_table.add_row([account.account_id, account.customer['business_name']])
+			if account.status == 'ACTIVE':
+				account_table.add_row([account.account_id, account.name])
 		
 		print 'Results returned in', time.time()-start, 'seconds.'
 		print account_table
@@ -166,39 +166,70 @@ if __name__ == '__main__':
 		
 		server_product_id = raw_input("Enter a Server Product: ")
 		
-		if len(Network.all(region_id=region_id)) > 0:
-			network_id_table = PrettyTable(["Network ID", "Network Name"])
-			for n in Network.all(region_id=region_id):
-				n.pprint()
-		
-			network_id = input("Enter a Network (Type 0 for None): ")
-		else:
-			network_id = 0
+		yes = set(['yes','y', 'ye', ''])
+		no = set(['no','n'])
 
-		cm_account = PrettyTable(["Status", "CM ID#", "Name", "Endpoint"]);
-		start = time.time()
-		
-		if len(ConfigurationManagementAccount.all()) > 0:
-			for cm in ConfigurationManagementAccount.all():
-				if cm.status == 'ACTIVE':
-					cm_account.add_row([cm.status, cm.cm_account_id, cm.cm_service['name'], cm.cm_service['service_endpoint']])
+		do_network = raw_input("Would you like to launch with a specific Network? (type yes or no):")
+
+		if do_network is not None and do_network in yes:
+			if len(Network.all(region_id=region_id)) > 0:
+				network_table = PrettyTable(["ID", "Name", "Network Range"])
+				start = time.time()
+				for n in Network.all(region_id=region_id):
+					network_table.add_row([n.network_id, n.name, n.network_address])
 			
-			print 'Results returned in', time.time()-start, 'seconds.'
-			print cm_account
-			
-			cm_account_id = input("Enter a Configuration Management Account ID: ")
-			
-			scripts = PrettyTable(["Script ID", "Name"]);
+				print network_table
+	
+				network_id = raw_input("Enter a Network (Hit Enter for None): ")
+				
+				if network_id is None:
+					network_id = 0
+			else:
+				network_id = 0
+
+		do_cm = raw_input("Would you like to launch with Configuration Management? (type yes or no):")
+
+		if do_cm is not None and do_cm in yes:
+			cm_account = PrettyTable(["Status", "CM ID#", "Name", "Endpoint"]);
 			start = time.time()
-			for sc in Script().all(cm_account_id):
-				if sc['status'] == 'ACTIVE':
-					scripts.add_row([sc['sharedScriptCode'], sc['name']])
 			
-			print 'Results returned in', time.time()-start, 'seconds.'
-			print scripts
-			
-			cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces): ")
+			if len(ConfigurationManagementAccount.all()) > 0:
+				for cm in ConfigurationManagementAccount.all():
+					if cm.status == 'ACTIVE':
+						cm_account.add_row([cm.status, cm.cm_account_id, cm.cm_service['name'], cm.cm_service['service_endpoint']])
+				
+				print 'Results returned in', time.time()-start, 'seconds.'
+				print cm_account
+				
+				cm_account_id = input("Enter a Configuration Management Account ID (Hit Enter for None): ")
+				
+				if cm_account_id is not None:
+					scripts = PrettyTable(["Script ID", "Name"]);
+					start = time.time()
+					for sc in Script().all(cm_account_id):
+						if sc['status'] == 'ACTIVE':
+							scripts.add_row([sc['sharedScriptCode'], sc['name']])
+					
+					print 'Results returned in', time.time()-start, 'seconds.'
+					print scripts
+					
+					cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces): ")
+
+		skip_volumes = raw_input("Would you like to skip volume creation and attachment? (type yes or no): ")
 		
+		if skip_volumes in yes:
+			cmd_args.novolumes = True
+
+		skip_snapshots = raw_input("Would you like to skip snapshot creation? (type yes or no): ")
+		
+		if skip_snapshots in yes:
+			cmd_args.nosnapshots = True
+
+		skip_imaging = raw_input("Would you like to skip machine imaging? (type yes or no): ")
+		
+		if skip_imaging in yes:
+			cmd_args.noimaging = True
+				
 		total_servers = input("How many resources would you like to create at a time (ie: 3)? ")
 
 print "###"
@@ -218,15 +249,18 @@ if cm_scripts is not None:
 
 if cmd_args.network == "0" or network_id == "0" or network_id is None:
 	print "# Network:\t\tNone"
-	network_id = 0
+	network_id = None
 else:
 	print "# Network:\t\t%s" % network_id
 
 print "###"
 
-run = "# Run again with:\t./smoke_test.py -a ",str(account_id)," -r ",str(region_id)," -d ",str(data_center_id)," -m ",str(machine_image_id)," -b ",str(billing_code_id)," -p ",str(server_product_id)," -n ",str(network_id)
+run = "# Run again with:\t./smoke_test.py -a ",str(account_id)," -r ",str(region_id)," -d ",str(data_center_id)," -m ",str(machine_image_id)," -b ",str(billing_code_id)," -p ",str(server_product_id)
 
 run = ''.join(run)
+
+if network_id is not None:
+	run += " -n "+str(network_id)
 
 if cm_account_id is not None:
 	run += " -cm "+str(cm_account_id)
@@ -246,6 +280,8 @@ if cmd_args.noimaging:
 run += ' -s '+str(total_servers)
 
 print run
+
+sys.exit(1)
 
 print "###"
 print "# Subscriptions:"
@@ -280,14 +316,21 @@ if sub[0]['subscribedServer']:
 		print "Launching server : %s" % (server_name)
 		new_server = Server()
 		new_server.provider_product_id = server_product_id
-		new_server.machine_image = machine_image_id
-		new_server.data_center = data_center_id
+		new_server.machine_image = int(machine_image_id)
+		new_server.data_center = int(data_center_id)
 		new_server.description = server_name
 		new_server.name = server_name
-		new_server.vlan = network_id
-		new_server.budget = billing_code_id
-		new_server.cmAccount = cm_account_id
-		new_server.cm_scripts = cm_scripts
+		
+		if network_id is not None:
+			new_server.vlan = int(network_id)
+		new_server.budget = int(billing_code_id)
+		
+		if cm_account_id is not None:
+			new_server.cmAccount = int(cm_account_id)
+			
+			if cm_scripts is not None:
+				new_server.cm_scripts = cm_scripts
+
 		job_id = new_server.launch()
 		jobs.append(job_id)
 	
@@ -301,7 +344,7 @@ if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
 		new_volume.data_center = data_center_id
 		new_volume.description = name
 		new_volume.name = name
-		new_volume.size_in_gb = 10
+		new_volume.size_in_gb = 5
 		new_volume.budget = billing_code_id
 		result = new_volume.create()
 		print("Creating Volume : %s" % name)
