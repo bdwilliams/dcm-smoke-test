@@ -14,6 +14,8 @@ from mixcoatl.infrastructure.server import Server
 from mixcoatl.infrastructure.volume import Volume
 from mixcoatl.infrastructure.snapshot import Snapshot
 from mixcoatl.geography.subscription import Subscription
+from mixcoatl.automation.configuration_management_account import ConfigurationManagementAccount
+from mixcoatl.automation.script import Script
 from mixcoatl.admin.job import Job
 
 jobs = []
@@ -23,10 +25,12 @@ server_launch_avg = []
 snapshots_created = []
 images_created = []
 averages = [int(time.time())]
+cm_account_id = None
+cm_scripts = None
 
 # TODO:
 # Cleanup ROOT-mounted Volumes.
-# Finish Network selection.
+# Show Agent Versions (and skip CM once API returns isRegistered status)
 
 def name_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for x in range(size))
@@ -73,6 +77,8 @@ if __name__ == '__main__':
 	parser.add_argument('--datacenter', '-d', help='Datacenter ID')
 	parser.add_argument('--machineimage', '-m', help='Machine Image ID')
 	parser.add_argument('--network', '-n', help='Network ID')
+	parser.add_argument('--cm_account_id', '-cm', help='Configuration Management Account ID')
+	parser.add_argument('--cm_scripts', '-cs', help='Configuration Management Scripts (comma delimited - no spaces)')
 	parser.add_argument('--budget', '-b', help='Budget Code ID')
 	parser.add_argument('--noimaging', '-ni', help='Skip Server Imaging', action='store_true')
 	parser.add_argument('--nosnapshots', '-ns', help='Skip Volume Snapshotting', action='store_true')
@@ -81,20 +87,22 @@ if __name__ == '__main__':
 	
 	if cmd_args.account is not None and cmd_args.region is not None and cmd_args.servers is not None and cmd_args.product is not None and cmd_args.datacenter is not None and cmd_args.machineimage is not None and cmd_args.budget is not None:
 		account_id = cmd_args.account
-		region_id = cmd_args.region
+		region_id = int(cmd_args.region)
 		total_servers = int(cmd_args.servers)
 		server_product_id = cmd_args.product
 		data_center_id = cmd_args.datacenter
 		machine_image_id = cmd_args.machineimage
 		billing_code_id = cmd_args.budget
 		network_id = cmd_args.network
+		cm_account_id = cmd_args.cm_account_id
+		cm_scripts = cmd_args.cm_scripts
 	else:
 		account_table = PrettyTable(["Account ID", "Account Name"]);
 		start = time.time()
 		
-		# TODO: list the status or not show accounts with STATUS != 'ACTIVE'
 		for account in Account.all():
-			account_table.add_row([account.account_id, account.customer['business_name']])
+			if account.status == 'ACTIVE':
+				account_table.add_row([account.account_id, account.name])
 		
 		print 'Results returned in', time.time()-start, 'seconds.'
 		print account_table
@@ -158,15 +166,70 @@ if __name__ == '__main__':
 		
 		server_product_id = raw_input("Enter a Server Product: ")
 		
-		if len(Network.all(region_id=region_id)) > 0:
-			network_id_table = PrettyTable(["Network ID", "Network Name"])
-			for n in Network.all(region_id=region_id):
-				n.pprint()
+		yes = set(['yes','y', 'ye', ''])
+		no = set(['no','n'])
+
+		do_network = raw_input("Would you like to launch with a specific Network? (type yes or no):")
+
+		if do_network is not None and do_network in yes:
+			if len(Network.all(region_id=region_id)) > 0:
+				network_table = PrettyTable(["ID", "Name", "Network Range"])
+				start = time.time()
+				for n in Network.all(region_id=region_id):
+					network_table.add_row([n.network_id, n.name, n.network_address])
+			
+				print network_table
+	
+				network_id = raw_input("Enter a Network (Hit Enter for None): ")
+				
+				if network_id is None:
+					network_id = 0
+			else:
+				network_id = 0
+
+		do_cm = raw_input("Would you like to launch with Configuration Management? (type yes or no):")
+
+		if do_cm is not None and do_cm in yes:
+			cm_account = PrettyTable(["Status", "CM ID#", "Name", "Endpoint"]);
+			start = time.time()
+			
+			if len(ConfigurationManagementAccount.all()) > 0:
+				for cm in ConfigurationManagementAccount.all():
+					if cm.status == 'ACTIVE':
+						cm_account.add_row([cm.status, cm.cm_account_id, cm.cm_service['name'], cm.cm_service['service_endpoint']])
+				
+				print 'Results returned in', time.time()-start, 'seconds.'
+				print cm_account
+				
+				cm_account_id = input("Enter a Configuration Management Account ID (Hit Enter for None): ")
+				
+				if cm_account_id is not None:
+					scripts = PrettyTable(["Script ID", "Name"]);
+					start = time.time()
+					for sc in Script().all(cm_account_id):
+						if sc['status'] == 'ACTIVE':
+							scripts.add_row([sc['sharedScriptCode'], sc['name']])
+					
+					print 'Results returned in', time.time()-start, 'seconds.'
+					print scripts
+					
+					cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces): ")
+
+		skip_volumes = raw_input("Would you like to skip volume creation and attachment? (type yes or no): ")
 		
-			network_id = input("Enter a Network (Type 0 for None): ")
-		else:
-			network_id = 0
+		if skip_volumes in yes:
+			cmd_args.novolumes = True
+
+		skip_snapshots = raw_input("Would you like to skip snapshot creation? (type yes or no): ")
 		
+		if skip_snapshots in yes:
+			cmd_args.nosnapshots = True
+
+		skip_imaging = raw_input("Would you like to skip machine imaging? (type yes or no): ")
+		
+		if skip_imaging in yes:
+			cmd_args.noimaging = True
+				
 		total_servers = input("How many resources would you like to create at a time (ie: 3)? ")
 
 print "###"
@@ -178,28 +241,48 @@ print "# Machine Image:\t%s" % machine_image_id
 print "# Server Product:\t%s" % server_product_id
 print "# Budget Code:\t\t%s" % billing_code_id
 
+if cm_account_id is not None:
+	print "# CM Account:\t\t%s" % cm_account_id
+
+if cm_scripts is not None:
+	print "# CM Scripts:\t\t%s" % cm_scripts
+
 if cmd_args.network == "0" or network_id == "0" or network_id is None:
 	print "# Network:\t\tNone"
-	network_id = 0
+	network_id = None
 else:
 	print "# Network:\t\t%s" % network_id
 
 print "###"
 
-run = "# Run again with:\t./smoke_test.py -a ",str(account_id)," -r ",str(region_id)," -d ",str(data_center_id)," -m ",str(machine_image_id)," -b ",str(billing_code_id)," -p ",str(server_product_id)," -n ",str(network_id)
-run2 = ''.join(run)
+run = "# Run again with:\t./smoke_test.py -a ",str(account_id)," -r ",str(region_id)," -d ",str(data_center_id)," -m ",str(machine_image_id)," -b ",str(billing_code_id)," -p ",str(server_product_id)
+
+run = ''.join(run)
+
+if network_id is not None:
+	run += " -n "+str(network_id)
+
+if cm_account_id is not None:
+	run += " -cm "+str(cm_account_id)
+
+if cm_scripts is not None:
+	run += ' -cs '+str(cm_scripts)
 
 if cmd_args.novolumes:
-	run2 += ' -nv'
+	run += ' -nv'
 
 if cmd_args.nosnapshots:
-	run2 += ' -ns'
+	run += ' -ns'
 
 if cmd_args.noimaging:
-	run2 += ' -ni'
-	
-print run2,"-s",str(total_servers)
-	
+	run += ' -ni'
+
+run += ' -s '+str(total_servers)
+
+print run
+
+sys.exit(1)
+
 print "###"
 print "# Subscriptions:"
 
@@ -233,12 +316,21 @@ if sub[0]['subscribedServer']:
 		print "Launching server : %s" % (server_name)
 		new_server = Server()
 		new_server.provider_product_id = server_product_id
-		new_server.machine_image = machine_image_id
-		new_server.data_center = data_center_id
+		new_server.machine_image = int(machine_image_id)
+		new_server.data_center = int(data_center_id)
 		new_server.description = server_name
 		new_server.name = server_name
-		new_server.vlan = network_id
-		new_server.budget = billing_code_id
+		
+		if network_id is not None:
+			new_server.vlan = int(network_id)
+		new_server.budget = int(billing_code_id)
+		
+		if cm_account_id is not None:
+			new_server.cmAccount = int(cm_account_id)
+			
+			if cm_scripts is not None:
+				new_server.cm_scripts = cm_scripts
+
 		job_id = new_server.launch()
 		jobs.append(job_id)
 	
@@ -252,7 +344,7 @@ if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
 		new_volume.data_center = data_center_id
 		new_volume.description = name
 		new_volume.name = name
-		new_volume.size_in_gb = 10
+		new_volume.size_in_gb = 5
 		new_volume.budget = billing_code_id
 		result = new_volume.create()
 		print("Creating Volume : %s" % name)
