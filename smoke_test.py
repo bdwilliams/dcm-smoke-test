@@ -262,7 +262,7 @@ if cm_account_id is not None:
 if cm_scripts is not None:
 	print "# CM Scripts:\t\t%s" % cm_scripts
 
-if cmd_args.network == "0" or network_id == "0" or network_id is None:
+if cmd_args.network == "0" or network_id == "0" or network_id == 0 or network_id is None:
 	print "# Network:\t\tNone"
 	network_id = None
 else:
@@ -347,7 +347,7 @@ if sub[0]['subscribedServer']:
 		new_server.name = server_name
 		new_server.budget = int(billing_code_id)
 
-		if network_id is not None:
+		if network_id is not None and network_id != '0':
 			new_server.vlan = int(network_id)
 		
 		if cm_account_id is not None:
