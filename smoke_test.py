@@ -259,6 +259,9 @@ print "# Budget Code:\t\t%s" % billing_code_id
 if cm_account_id is not None:
 	print "# CM Account:\t\t%s" % cm_account_id
 
+if p_scripts is not None:
+	print "# CM Personalities:\t\t%s" % p_scripts
+	
 if cm_scripts is not None:
 	print "# CM Scripts:\t\t%s" % cm_scripts
 
