@@ -16,6 +16,7 @@ from mixcoatl.infrastructure.snapshot import Snapshot
 from mixcoatl.geography.subscription import Subscription
 from mixcoatl.automation.configuration_management_account import ConfigurationManagementAccount
 from mixcoatl.automation.script import Script
+from mixcoatl.automation.personality import Personality
 from mixcoatl.admin.job import Job
 
 jobs = []
@@ -78,6 +79,7 @@ if __name__ == '__main__':
 	parser.add_argument('--machineimage', '-m', help='Machine Image ID')
 	parser.add_argument('--network', '-n', help='Network ID')
 	parser.add_argument('--cm_account_id', '-cm', help='Configuration Management Account ID')
+	parser.add_argument('--cm_personalities', '-cp', help='Configuration Management Personalities (comma delimited - no spaces)')
 	parser.add_argument('--cm_scripts', '-cs', help='Configuration Management Scripts (comma delimited - no spaces)')
 	parser.add_argument('--budget', '-b', help='Budget Code ID')
 	parser.add_argument('--noimaging', '-ni', help='Skip Server Imaging', action='store_true')
@@ -96,6 +98,7 @@ if __name__ == '__main__':
 		network_id = cmd_args.network
 		cm_account_id = cmd_args.cm_account_id
 		cm_scripts = cmd_args.cm_scripts
+		p_scripts = cmd_args.cm_personalities
 	else:
 		account_table = PrettyTable(["Account ID", "Account Name"]);
 		start = time.time()
@@ -131,8 +134,7 @@ if __name__ == '__main__':
 		print datacenter_table
 		
 		data_center_id = input("Enter a Datacenter ID: ")
-		
-		# TODO: allow agent_version via mixcoatl.
+
 		machine_image_table = PrettyTable(["Machine Image ID", "Machine Image Name", "Provider ID"])
 		start = time.time()
 		
@@ -169,7 +171,7 @@ if __name__ == '__main__':
 		yes = set(['yes','y', 'ye', ''])
 		no = set(['no','n'])
 
-		do_network = raw_input("Would you like to launch with a specific Network? (type yes or no):")
+		do_network = raw_input("Would you like to launch with a specific Network? (type yes or no): ")
 
 		if do_network is not None and do_network in yes:
 			if len(Network.all(region_id=region_id)) > 0:
@@ -186,8 +188,10 @@ if __name__ == '__main__':
 					network_id = 0
 			else:
 				network_id = 0
+		else:
+			network_id = 0
 
-		do_cm = raw_input("Would you like to launch with Configuration Management? (type yes or no):")
+		do_cm = raw_input("Would you like to launch with Configuration Management? (type yes or no): ")
 
 		if do_cm is not None and do_cm in yes:
 			cm_account = PrettyTable(["Status", "CM ID#", "Name", "Endpoint"]);
@@ -204,6 +208,17 @@ if __name__ == '__main__':
 				cm_account_id = input("Enter a Configuration Management Account ID (Hit Enter for None): ")
 				
 				if cm_account_id is not None:
+					personalities = PrettyTable(["Personality ID", "Name"]);
+					start = time.time()
+					for p in Personality().all(cm_account_id):
+						if p['status'] == 'ACTIVE':
+							personalities.add_row([p['sharedPersonalityCode'], p['name']])
+					
+					print 'Results returned in', time.time()-start, 'seconds.'
+					print personalities
+
+					p_scripts = raw_input("Enter Personality IDs (comma delimited - no spaces; enter for none): ")
+
 					scripts = PrettyTable(["Script ID", "Name"]);
 					start = time.time()
 					for sc in Script().all(cm_account_id):
@@ -213,7 +228,7 @@ if __name__ == '__main__':
 					print 'Results returned in', time.time()-start, 'seconds.'
 					print scripts
 					
-					cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces): ")
+					cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces; enter for none): ")
 
 		skip_volumes = raw_input("Would you like to skip volume creation and attachment? (type yes or no): ")
 		
@@ -268,6 +283,9 @@ if cm_account_id is not None:
 if cm_scripts is not None:
 	run += ' -cs '+str(cm_scripts)
 
+if p_scripts is not None:
+	run += ' -cp '+str(p_scripts)
+	
 if cmd_args.novolumes:
 	run += ' -nv'
 
@@ -281,8 +299,6 @@ run += ' -s '+str(total_servers)
 
 print run
 
-sys.exit(1)
-
 print "###"
 print "# Subscriptions:"
 
@@ -293,20 +309,29 @@ if sub[0]['subscribedServer']:
 else:
 	print "# Server:\t\t[UNSUPPORTED]"
 
-if sub[0]['subscribedVolume']:
-	print "# Volumes:\t\t[OK]"
+if cmd_args.novolumes is False:
+	if sub[0]['subscribedVolume']:
+		print "# Volumes:\t\t[OK]"
+	else:
+		print "# Volumes:\t\t[UNSUPPORTED]"
 else:
-	print "# Volumes:\t\t[UNSUPPORTED]"
+	print "# Volumes:\t\t[SKIPPING]"
 
-if sub[0]['subscribedSnapshot']:
-	print "# Snapshots:\t\t[OK]"
+if cmd_args.nosnapshots is False:
+	if sub[0]['subscribedSnapshot']:
+		print "# Snapshots:\t\t[OK]"
+	else:
+		print "# Snapshots:\t\t[UNSUPPORTED]"
 else:
-	print "# Snapshots:\t\t[UNSUPPORTED]"
+	print "# Snapshots:\t\t[SKIPPING]"
 
-if sub[0]['subscribedMachineImage']:
-	print "# Image:\t\t[OK]"
+if cmd_args.noimaging is False:
+	if sub[0]['subscribedMachineImage']:
+		print "# Image:\t\t[OK]"
+	else:
+		print "# Image:\t\t[UNSUPPORTED]"
 else:
-	print "# Image:\t\t[UNSUPPORTED]"
+	print "# Image:\t\t[SKIPPING]"
 
 print "###"
 
@@ -320,14 +345,17 @@ if sub[0]['subscribedServer']:
 		new_server.data_center = int(data_center_id)
 		new_server.description = server_name
 		new_server.name = server_name
-		
+		new_server.budget = int(billing_code_id)
+
 		if network_id is not None:
 			new_server.vlan = int(network_id)
-		new_server.budget = int(billing_code_id)
 		
 		if cm_account_id is not None:
 			new_server.cmAccount = int(cm_account_id)
-			
+
+			if p_scripts is not None:
+				new_server.p_scripts = p_scripts	
+						
 			if cm_scripts is not None:
 				new_server.cm_scripts = cm_scripts
 
@@ -337,7 +365,7 @@ if sub[0]['subscribedServer']:
 	# Watch server launch jobs
 	watch_jobs()
 
-if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
+if sub[0]['subscribedVolume'] and cmd_args.novolumes is False:
 	for vc in range(0, total_servers):
 		name = "test-volume-"+name_generator()
 		new_volume = Volume()
@@ -364,7 +392,7 @@ if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
 		# Watch volume attach jobs
 		watch_jobs()
 
-if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None and cmd_args.novolumes is None:
+if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is False and cmd_args.novolumes is False:
 	# TODO: Does not seem to change snapshot name during create.
 	for sc in volumes_created:
 		volume = Volume(sc)
@@ -377,7 +405,7 @@ if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None and cmd_args.no
 	# Watch snapshot jobs
 	watch_jobs()
 
-if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer'] and cmd_args.noimaging is None:
+if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer'] and cmd_args.noimaging is False:
 	sv = 0
 	for mi in servers_launched:
 		m = MachineImage()
@@ -400,19 +428,19 @@ if sub[0]['subscribedServer']:
 		result = server.destroy()
 		print "Terminating server : #%s" % (st)
 
-if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
+if sub[0]['subscribedVolume'] and cmd_args.novolumes is False:
 	for vd in volumes_created:
 	    volume = Volume(vd)
 	    result = volume.destroy()
 	    print "Deleting volume : #%s" % (vd)
 
-if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None and cmd_args.novolumes is None:
+if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is True and cmd_args.novolumes is False:
 	for sd in snapshots_created:
 	    snapshot = Snapshot(sd)
 	    result = snapshot.destroy()
 	    print "Deleting snapshot : #%s" % (sd)
 
-if sub[0]['subscribedMachineImage'] and cmd_args.noimaging is None:
+if sub[0]['subscribedMachineImage'] and cmd_args.noimaging is False:
 	for md in images_created:
 	    m = MachineImage(md)
 	    result = m.destroy()
