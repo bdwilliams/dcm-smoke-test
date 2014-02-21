@@ -309,20 +309,29 @@ if sub[0]['subscribedServer']:
 else:
 	print "# Server:\t\t[UNSUPPORTED]"
 
-if sub[0]['subscribedVolume']:
-	print "# Volumes:\t\t[OK]"
+if cmd_args.novolumes is False:
+	if sub[0]['subscribedVolume']:
+		print "# Volumes:\t\t[OK]"
+	else:
+		print "# Volumes:\t\t[UNSUPPORTED]"
 else:
-	print "# Volumes:\t\t[UNSUPPORTED]"
+	print "# Volumes:\t\t[SKIPPING]"
 
-if sub[0]['subscribedSnapshot']:
-	print "# Snapshots:\t\t[OK]"
+if cmd_args.nosnapshots is False:
+	if sub[0]['subscribedSnapshot']:
+		print "# Snapshots:\t\t[OK]"
+	else:
+		print "# Snapshots:\t\t[UNSUPPORTED]"
 else:
-	print "# Snapshots:\t\t[UNSUPPORTED]"
+	print "# Snapshots:\t\t[SKIPPING]"
 
-if sub[0]['subscribedMachineImage']:
-	print "# Image:\t\t[OK]"
+if cmd_args.noimaging is False:
+	if sub[0]['subscribedMachineImage']:
+		print "# Image:\t\t[OK]"
+	else:
+		print "# Image:\t\t[UNSUPPORTED]"
 else:
-	print "# Image:\t\t[UNSUPPORTED]"
+	print "# Image:\t\t[SKIPPING]"
 
 print "###"
 
@@ -356,7 +365,7 @@ if sub[0]['subscribedServer']:
 	# Watch server launch jobs
 	watch_jobs()
 
-if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
+if sub[0]['subscribedVolume'] and cmd_args.novolumes is False:
 	for vc in range(0, total_servers):
 		name = "test-volume-"+name_generator()
 		new_volume = Volume()
@@ -383,7 +392,7 @@ if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
 		# Watch volume attach jobs
 		watch_jobs()
 
-if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None and cmd_args.novolumes is None:
+if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is False and cmd_args.novolumes is False:
 	# TODO: Does not seem to change snapshot name during create.
 	for sc in volumes_created:
 		volume = Volume(sc)
@@ -396,7 +405,7 @@ if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None and cmd_args.no
 	# Watch snapshot jobs
 	watch_jobs()
 
-if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer'] and cmd_args.noimaging is None:
+if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer'] and cmd_args.noimaging is False:
 	sv = 0
 	for mi in servers_launched:
 		m = MachineImage()
@@ -419,19 +428,19 @@ if sub[0]['subscribedServer']:
 		result = server.destroy()
 		print "Terminating server : #%s" % (st)
 
-if sub[0]['subscribedVolume'] and cmd_args.novolumes is None:
+if sub[0]['subscribedVolume'] and cmd_args.novolumes is False:
 	for vd in volumes_created:
 	    volume = Volume(vd)
 	    result = volume.destroy()
 	    print "Deleting volume : #%s" % (vd)
 
-if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is None and cmd_args.novolumes is None:
+if sub[0]['subscribedSnapshot'] and cmd_args.nosnapshots is True and cmd_args.novolumes is False:
 	for sd in snapshots_created:
 	    snapshot = Snapshot(sd)
 	    result = snapshot.destroy()
 	    print "Deleting snapshot : #%s" % (sd)
 
-if sub[0]['subscribedMachineImage'] and cmd_args.noimaging is None:
+if sub[0]['subscribedMachineImage'] and cmd_args.noimaging is False:
 	for md in images_created:
 	    m = MachineImage(md)
 	    result = m.destroy()
