@@ -229,6 +229,10 @@ if __name__ == '__main__':
 					print scripts
 					
 					cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces; enter for none): ")
+		else:
+			cm_account_id = None
+			p_scripts = None
+			cm_scripts = None
 
 		skip_volumes = raw_input("Would you like to skip volume creation and attachment? (type yes or no): ")
 		
