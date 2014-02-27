@@ -3,8 +3,10 @@ DCM Smoke Test Script
 
 A Quick Sanity/Smoke-test script for retrieving launch/creation times.
 
-Install:
+#### Install
 
-easy_install mixcoatl datetime prettytable
+pip install -r requirements.txt
+
+#### Run
 
 ./smoke_test.py
