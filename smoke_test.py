@@ -17,6 +17,7 @@ from mixcoatl.geography.subscription import Subscription
 from mixcoatl.automation.configuration_management_account import ConfigurationManagementAccount
 from mixcoatl.automation.script import Script
 from mixcoatl.automation.personality import Personality
+from mixcoatl.automation.environment import Environment
 from mixcoatl.admin.job import Job
 
 jobs = []
@@ -79,6 +80,7 @@ if __name__ == '__main__':
 	parser.add_argument('--machineimage', '-m', help='Machine Image ID')
 	parser.add_argument('--network', '-n', help='Network ID')
 	parser.add_argument('--cm_account_id', '-cm', help='Configuration Management Account ID')
+	parser.add_argument('--cm_environment', '-ce', help='Configuration Management Environment ID')
 	parser.add_argument('--cm_personalities', '-cp', help='Configuration Management Personalities (comma delimited - no spaces)')
 	parser.add_argument('--cm_scripts', '-cs', help='Configuration Management Scripts (comma delimited - no spaces)')
 	parser.add_argument('--budget', '-b', help='Budget Code ID')
@@ -97,6 +99,7 @@ if __name__ == '__main__':
 		billing_code_id = cmd_args.budget
 		network_id = cmd_args.network
 		cm_account_id = cmd_args.cm_account_id
+		cm_environment = cmd_args.cm_environment
 		cm_scripts = cmd_args.cm_scripts
 		p_scripts = cmd_args.cm_personalities
 	else:
@@ -208,6 +211,17 @@ if __name__ == '__main__':
 				cm_account_id = input("Enter a Configuration Management Account ID (Hit Enter for None): ")
 				
 				if cm_account_id is not None:
+					environments = PrettyTable(["ID", "Status", "Description"])
+					start = time.time()
+					for env in Environment.all(cm_account_id):
+						if env['status'] == 'ACTIVE':
+							environments.add_row([env['environmentId'], env['status'], env['description'])
+
+					print 'Results returned in', time.time()-start, 'seconds.'
+					print personalities
+
+					cm_environment = raw_input("Enter Environment ID: ")
+
 					personalities = PrettyTable(["Personality ID", "Name"]);
 					start = time.time()
 					for p in Personality().all(cm_account_id):
@@ -217,7 +231,7 @@ if __name__ == '__main__':
 					print 'Results returned in', time.time()-start, 'seconds.'
 					print personalities
 
-					p_scripts = raw_input("Enter Personality IDs (comma delimited - no spaces; enter for none): ")
+					p_scripts = raw_input("Enter Personality IDs (comma delimited - no spaces; enter for none): ") or None
 
 					scripts = PrettyTable(["Script ID", "Name"]);
 					start = time.time()
@@ -228,7 +242,7 @@ if __name__ == '__main__':
 					print 'Results returned in', time.time()-start, 'seconds.'
 					print scripts
 					
-					cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces; enter for none): ")
+					cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces; enter for none): ") or None
 		else:
 			cm_account_id = None
 			p_scripts = None
@@ -287,6 +301,9 @@ if network_id is not None:
 if cm_account_id is not None:
 	run += " -cm "+str(cm_account_id)
 
+if cm_environment is not None:
+	run += " -ce "+str(cm_environment)
+
 if cm_scripts is not None:
 	run += ' -cs '+str(cm_scripts)
 
@@ -305,6 +322,8 @@ if cmd_args.noimaging:
 run += ' -s '+str(total_servers)
 
 print run
+
+sys.exit(1)
 
 print "###"
 print "# Subscriptions:"
