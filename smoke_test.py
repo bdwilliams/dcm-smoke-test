@@ -243,6 +243,7 @@ if __name__ == '__main__':
 					cm_scripts = raw_input("Enter Script IDs (comma delimited - no spaces; enter for none): ") or None
 		else:
 			cm_account_id = None
+			cm_environment = None
 			p_scripts = None
 			cm_scripts = None
 
@@ -275,8 +276,11 @@ print "# Budget Code:\t\t%s" % billing_code_id
 if cm_account_id is not None:
 	print "# CM Account:\t\t%s" % cm_account_id
 
+if cm_environment is not None:
+	print "# CM Environment:\t\t%s" % cm_environment
+
 if p_scripts is not None:
-	print "# CM Personalities:\t\t%s" % p_scripts
+	print "# CM Personalities:\t%s" % p_scripts
 
 if cm_scripts is not None:
 	print "# CM Scripts:\t\t%s" % cm_scripts
