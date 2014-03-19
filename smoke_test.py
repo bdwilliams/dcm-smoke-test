@@ -459,7 +459,7 @@ if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer'] and cmd_args.
 
 if t_wait is not None:
 	print "All runs complete.  Waiting "+str(t_wait)+" minute(s) to clean up."
-	time.sleep(t_wait * 60)
+	time.sleep(float(t_wait) * 60)
 
 print "Cleaning up the mess..."
 
