@@ -85,6 +85,7 @@ if __name__ == '__main__':
 	parser.add_argument('--noimaging', '-ni', help='Skip Server Imaging', action='store_true')
 	parser.add_argument('--nosnapshots', '-ns', help='Skip Volume Snapshotting', action='store_true')
 	parser.add_argument('--novolumes', '-nv', help='Skip Volume Creation/Attaching', action='store_true')
+	parser.add_argument('--vol_type', '-vt', help='Volume Type (1 for volume during launch and 2 for volume after launch)')	
 	parser.add_argument('--wait', '-w', help='Wait N minutes before cleaning up.')
 	cmd_args = parser.parse_args()
 
@@ -102,6 +103,7 @@ if __name__ == '__main__':
 		cm_scripts = cmd_args.cm_scripts
 		p_scripts = cmd_args.cm_personalities
 		t_wait = cmd_args.wait
+		vol_type = cmd_args.vol_type
 	else:
 		account_table = PrettyTable(["Account ID", "Account Name"]);
 		start = time.time()
@@ -253,6 +255,16 @@ if __name__ == '__main__':
 
 		if skip_volumes in yes:
 			cmd_args.novolumes = True
+		else:
+			during = set(['during','d',''])
+			after = set(['after','a'])
+
+			vol_type = raw_input("Would you like volume creation to happen during server launch or after launch? (type during or after): ")
+			
+			if vol_type in during:
+				cmd_args.vol_type = 1
+			else:
+				cmd_args.vol_type = 2				
 
 		skip_snapshots = raw_input("Would you like to skip snapshot creation? (type yes or no): ")
 
@@ -322,6 +334,9 @@ if p_scripts is not None:
 if cmd_args.novolumes:
 	run += ' -nv'
 
+if cmd_args.vol_type:
+	run += ' -vt '+str(vol_type)
+
 if cmd_args.nosnapshots:
 	run += ' -ns'
 
@@ -386,6 +401,9 @@ if sub[0]['subscribedServer']:
 		if network_id is not None and network_id != '0':
 			new_server.vlan = int(network_id)
 
+		if vol_type == '1':
+			new_server.volumeConfiguration = vol_type
+
 		if cm_account_id is not None:
 			new_server.cmAccount = int(cm_account_id)
 			new_server.environment = cm_environment
@@ -402,7 +420,7 @@ if sub[0]['subscribedServer']:
 	# Watch server launch jobs
 	watch_jobs()
 
-if sub[0]['subscribedVolume'] and cmd_args.novolumes is False:
+if sub[0]['subscribedVolume'] and cmd_args.novolumes is False and cmd_args.vol_type == '2':
 	for vc in range(0, total_servers):
 		name = "test-volume-"+name_generator()
 		new_volume = Volume()
