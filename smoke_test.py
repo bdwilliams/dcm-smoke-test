@@ -85,6 +85,7 @@ if __name__ == '__main__':
 	parser.add_argument('--noimaging', '-ni', help='Skip Server Imaging', action='store_true')
 	parser.add_argument('--nosnapshots', '-ns', help='Skip Volume Snapshotting', action='store_true')
 	parser.add_argument('--novolumes', '-nv', help='Skip Volume Creation/Attaching', action='store_true')
+	parser.add_argument('--wait', '-w', help='Wait N minutes before cleaning up.')
 	cmd_args = parser.parse_args()
 
 	if cmd_args.account is not None and cmd_args.region is not None and cmd_args.servers is not None and cmd_args.product is not None and cmd_args.datacenter is not None and cmd_args.machineimage is not None and cmd_args.budget is not None:
@@ -100,6 +101,7 @@ if __name__ == '__main__':
 		cm_environment = cmd_args.cm_environment
 		cm_scripts = cmd_args.cm_scripts
 		p_scripts = cmd_args.cm_personalities
+		t_wait = cmd_args.wait
 	else:
 		account_table = PrettyTable(["Account ID", "Account Name"]);
 		start = time.time()
@@ -264,6 +266,8 @@ if __name__ == '__main__':
 
 		total_servers = input("How many resources would you like to create at a time (ie: 3)? ")
 
+		t_wait = input("How many minutes do you want to wait before cleaning up the mess (ie: 5)? ")
+
 print "###"
 print "# Started:\t\t%s" % (time.strftime("%c"))
 print "# Account:\t\t%s" % account_id
@@ -290,6 +294,9 @@ if cmd_args.network == "0" or network_id == "0" or network_id == 0 or network_id
 	network_id = None
 else:
 	print "# Network:\t\t%s" % network_id
+
+if t_wait is not None:
+	print "# Cleanup Wait:\t\t%s" % t_wait
 
 print "###"
 
@@ -320,6 +327,9 @@ if cmd_args.nosnapshots:
 
 if cmd_args.noimaging:
 	run += ' -ni'
+
+if cmd_args.wait:
+	run += ' -w '+str(t_wait)
 
 run += ' -s '+str(total_servers)
 
@@ -446,6 +456,10 @@ if sub[0]['subscribedMachineImage'] and sub[0]['subscribedServer'] and cmd_args.
 
 	# Watch imaging jobs
 	watch_jobs()
+
+if t_wait is not None:
+	print "All runs complete.  Waiting "+str(t_wait)+" minute(s) to clean up."
+	time.sleep(t_wait * 60)
 
 print "Cleaning up the mess..."
 
