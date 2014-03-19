@@ -281,7 +281,7 @@ if cm_account_id is not None:
 	print "# CM Account:\t\t%s" % cm_account_id
 
 if cm_environment is not None:
-	print "# CM Environment:\t\t%s" % cm_environment
+	print "# CM Environment:\t%s" % cm_environment
 
 if p_scripts is not None:
 	print "# CM Personalities:\t%s" % p_scripts
