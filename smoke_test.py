@@ -255,6 +255,7 @@ if __name__ == '__main__':
 
 		if skip_volumes in yes:
 			cmd_args.novolumes = True
+			cmd_args.vol_type = None
 		else:
 			during = set(['during','d',''])
 			after = set(['after','a'])
@@ -335,7 +336,7 @@ if cmd_args.novolumes:
 	run += ' -nv'
 
 if cmd_args.vol_type:
-	run += ' -vt '+str(vol_type)
+	run += ' -vt '+str(cmd_args.vol_type)
 
 if cmd_args.nosnapshots:
 	run += ' -ns'
@@ -401,7 +402,7 @@ if sub[0]['subscribedServer']:
 		if network_id is not None and network_id != '0':
 			new_server.vlan = int(network_id)
 
-		if vol_type == '1':
+		if vol_type is not None and vol_type == '1':
 			new_server.volumeConfiguration = vol_type
 
 		if cm_account_id is not None:
